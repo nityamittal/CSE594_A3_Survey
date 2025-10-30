@@ -123,7 +123,11 @@
   <script>
     const qs = new URLSearchParams(location.search);
     const pid = sessionStorage.getItem('participant_id');
-    if (!pid) { location.href = '/study'; }
+    if (!pid) {
+      const cond = qs.get('condition') || sessionStorage.getItem('condition') || 'control';
+      location.href = '/study?condition=' + encodeURIComponent(cond);
+    }
+
 
     let startTs = 0, current = null;
 
