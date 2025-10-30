@@ -97,7 +97,8 @@
 
   <script>
     const qs = new URLSearchParams(location.search);
-    const condition = (qs.get('condition') || 'control').toLowerCase();
+    const condition = (qs.get('condition') || sessionStorage.getItem('condition') || 'control').toLowerCase();
+    sessionStorage.setItem('condition', condition);
 
     document.getElementById('startBtn').onclick = async () => {
       try {
