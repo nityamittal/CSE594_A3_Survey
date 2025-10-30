@@ -1,0 +1,17 @@
+{
+    "sqltools.useNodeRuntime": true,
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "A3 Local",
+            "database": "${workspaceFolder:a3_study_upgraded_flask}/app_copy.db"
+        },
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "A3 Local",
+            "database": "${workspaceFolder:a3_study_upgraded_flask}/app.db"
+        }
+    ]
+}

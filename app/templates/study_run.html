@@ -1,0 +1,195 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ethical Dilemmas – Trials</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f3e8ff;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #475569;
+      --border: #e5e7eb;
+      --accent: #7c3aed;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg);
+      font-family: Roboto, -apple-system, Segoe UI, Arial, sans-serif;
+      color: var(--text); line-height: 1.55;
+    }
+
+    .wrap {
+      max-width: 1160px;
+      margin: 24px auto 48px;
+      padding: 0 28px 28px;           /* no top padding so banner flushes */
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+
+    /* In-card banner, smaller height */
+    .hero {
+      /* remove the 3 lines below if you don't want it sticky */
+      position: sticky;
+      top: 0;
+      z-index: 5;
+
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+    .hero img {
+      display: block;
+      width: 100%;
+      height: 220px;                   /* reduced size */
+      object-fit: cover;
+      border-top-left-radius: 16px;
+      border-top-right-radius: 16px;
+    }
+
+    h2, h3 { text-align: center; margin: 14px 0; }
+
+    /* Wider left column for long dilemmas */
+    .row { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 980px) {
+      .row { grid-template-columns: 1.35fr 0.65fr; }
+    }
+
+    .panel {
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+    }
+    .muted { color: var(--muted); }
+
+    .dilemma-text {
+      text-align: justify;             /* <-- justification requested */
+      text-justify: inter-word;
+      hyphens: auto;
+    }
+
+    .ai {
+      background:#faf5ff;
+      border: 1px solid #e9d5ff;
+      border-radius: 10px;
+      padding: 12px;
+      margin: 12px 0;
+    }
+
+    .likert { list-style: none; padding-left: 0; margin: 8px 0; }
+    .likert li { margin: 8px 0; }
+
+    .controls { display:flex; justify-content:center; margin-top: 16px; }
+    button#submitBtn {
+      background: var(--accent); color: white; border: none; border-radius: 10px;
+      padding: 10px 20px; font-weight: 700; cursor: pointer; font-size: 15px;
+      box-shadow: 0 6px 14px rgba(124,58,237,0.25);
+    }
+    button#submitBtn:disabled { opacity: .6; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <img src="{{ url_for('static', filename='img/dilemma.jpg') }}" alt="Study banner">
+    </div>
+    <h2>Rate the Severity (1–5)</h2>
+
+    <div class="row">
+      <!-- LEFT: Trial -->
+      <div class="panel">
+        <div id="trialBox"><p class="muted">Loading next dilemma…</p></div>
+        <div class="controls"><button id="submitBtn" disabled>Submit</button></div>
+      </div>
+
+      <!-- RIGHT: Always-on rubric -->
+      <div class="panel">
+        <h3>Severity Guide</h3>
+        <ul class="likert">
+          <li><strong>1</strong> — Minor ethical concern or social misstep</li>
+          <li><strong>2</strong> — Low-level tension; questionable action with little harm</li>
+          <li><strong>3</strong> — Moderate dilemma with moral ambiguity or potential harm</li>
+          <li><strong>4</strong> — Serious violation with clear negative consequences</li>
+          <li><strong>5</strong> — Severe crisis involving significant harm, deception, or abuse of power</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const pid = sessionStorage.getItem('participant_id');
+    if (!pid) { location.href = '/study'; }
+
+    let startTs = 0, current = null;
+
+    async function loadNext() {
+      const res = await fetch('/study/next?participant_id='+encodeURIComponent(pid));
+      if (res.status === 204) { location.href='/study/finish'; return; }
+      const d = await res.json(); current = d;
+
+      const box = document.getElementById('trialBox');
+      box.innerHTML = '';
+
+      const dtext = (d.payload.dilemma_text || JSON.stringify(d.payload));
+      box.insertAdjacentHTML('beforeend', `<p class="dilemma-text"><strong>Dilemma:</strong> ${dtext}</p>`);
+
+      if ((qs.get('condition')||'control') === 'ai') {
+        const aiScore = d.payload.ai_severity_score;
+        const aiJust  = d.payload.ai_justification || '';
+        box.insertAdjacentHTML('beforeend',
+          `<div class="ai"><em>AI predicted severity:</em> <strong>${aiScore ?? '(n/a)'}</strong><br>
+           <em>AI justification:</em> ${aiJust}</div>`);
+        fetch('/study/event',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            participant_id:Number(pid),
+            trial_id:d.trial_id,
+            event_type:'ai_shown',
+            payload:{ ai_severity_score: aiScore, ai_justification: aiJust }
+          })
+        });
+      }
+
+      const labels={1:'Minor issue',2:'Low-level tension',3:'Moderate dilemma',4:'Serious violation',5:'Severe crisis'};
+      const ul = document.createElement('ul'); ul.className='likert';
+      for (let val=1; val<=5; val++) {
+        const li=document.createElement('li');
+        li.innerHTML = `<label><input type="radio" name="ans" value="${val}"> ${val} — ${labels[val]}</label>`;
+        ul.appendChild(li);
+      }
+      box.appendChild(ul);
+
+      document.getElementById('submitBtn').disabled = false;
+      startTs = performance.now();
+    }
+
+    document.getElementById('submitBtn').onclick = async () => {
+      const sel = document.querySelector('input[name="ans"]:checked');
+      if (!sel) { alert('Pick 1–5'); return; }
+      const rt = Math.round(performance.now() - startTs);
+      const body = {
+        participant_id: Number(pid),
+        trial_id: current.trial_id,
+        answer: { value: Number(sel.value) },
+        correct: null,
+        rt_ms: rt,
+        revealed_ai: (qs.get('condition')||'control')==='ai'
+      };
+      const res = await fetch('/study/submit', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) { alert('Save failed'); return; }
+      loadNext();
+    };
+
+    loadNext();
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+[
+  {
+    "question": "2 + 2 = ?",
+    "options": [
+      "3",
+      "4",
+      "5"
+    ],
+    "correct_index": 1,
+    "split": "all"
+  },
+  {
+    "question": "Capital of France?",
+    "options": [
+      "Berlin",
+      "Paris",
+      "Rome"
+    ],
+    "correct_index": 1,
+    "split": "all"
+  }
+]

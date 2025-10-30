@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ethical Dilemma Severity Study</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f3e8ff;    /* lilac */
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #475569;
+      --border: #e5e7eb;
+      --accent: #7c3aed;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      font-family: Roboto, -apple-system, Segoe UI, Arial, sans-serif;
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    /* Card container (border look) */
+    .wrap {
+      max-width: 1160px;
+      margin: 24px auto 48px;
+      padding: 0 28px 28px;           /* no top padding so banner sits flush */
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.06);
+      overflow: hidden;                /* match rounded corners with banner */
+    }
+
+    /* Top banner inside the card (not full page) */
+    .hero {
+      /* if you don't want it to stick while scrolling, delete the next 3 lines */
+      position: sticky;
+      top: 0;
+      z-index: 5;
+
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+    .hero img {
+      display: block;
+      width: 100%;
+      height: 220px;                   /* smaller banner height */
+      object-fit: cover;               /* keep it tasteful while scaling */
+      border-top-left-radius: 16px;
+      border-top-right-radius: 16px;
+    }
+
+    h2, h3 { text-align: center; margin: 14px 0; }
+    p.lead { text-align: center; color: var(--muted); margin: 8px 0 18px; }
+
+    .rubric {
+      margin: 18px auto 20px; padding: 16px 18px;
+      background: #faf5ff; border: 1px dashed #e9d5ff; border-radius: 12px;
+    }
+    .rubric ul { margin: 6px 0 6px 18px; }
+    .cta { display: flex; justify-content: center; margin-top: 20px; }
+    button#startBtn {
+      background: var(--accent); color: white; border: none; border-radius: 10px;
+      padding: 12px 22px; font-weight: 700; cursor: pointer; font-size: 16px;
+      box-shadow: 0 6px 14px rgba(124,58,237,0.25);
+    }
+    button#startBtn:hover { filter: brightness(1.05); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <img src="{{ url_for('static', filename='img/dilemma.jpg') }}" alt="Study banner">
+    </div>
+
+    <h2>Ethical Dilemma Severity Study</h2>
+    <p class="lead">You’ll rate <strong>10 dilemmas</strong> on a 1–5 severity scale.</p>
+
+    <div class="rubric">
+      <h3>Severity Rating (1–5)</h3>
+      <ul>
+        <li><strong>1</strong> — Minor ethical concern or social misstep</li>
+        <li><strong>2</strong> — Low-level tension; questionable action with little harm</li>
+        <li><strong>3</strong> — Moderate dilemma with moral ambiguity or potential harm</li>
+        <li><strong>4</strong> — Serious violation with clear negative consequences</li>
+        <li><strong>5</strong> — Severe crisis involving significant harm, deception, or abuse of power</li>
+      </ul>
+    </div>
+
+    <div class="cta">
+      <button id="startBtn">Start</button>
+    </div>
+  </div>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const condition = (qs.get('condition') || 'control').toLowerCase();
+
+    document.getElementById('startBtn').onclick = async () => {
+      try {
+        const body = {
+          workerId: qs.get('workerId'),
+          assignmentId: qs.get('assignmentId'),
+          hitId: qs.get('hitId'),
+          condition
+        };
+        const res = await fetch('/study/start', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(body)
+        });
+        const txt = await res.text();
+        if (!res.ok) { alert('Start failed: ' + txt); return; }
+        const j = JSON.parse(txt);
+        sessionStorage.setItem('participant_id', j.participant_id);
+        location.href = '/study/run?condition=' + encodeURIComponent(condition);
+      } catch(e) { alert('Start error: ' + e.message); }
+    };
+  </script>
+</body>
+</html>
