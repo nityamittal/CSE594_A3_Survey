@@ -57,7 +57,9 @@
 
     // derive a deterministic completion code from participant + condition
     const storedCond = (sessionStorage.getItem('condition') || 'control').toLowerCase();
-    const code = `A3-${storedCond.toUpperCase()}-P${pid}`;
+    const code = String(pid);
+    document.getElementById('ccode').textContent = code;
+
     document.getElementById('ccode').textContent = code;
 
     document.getElementById('more').onclick = async () => {
