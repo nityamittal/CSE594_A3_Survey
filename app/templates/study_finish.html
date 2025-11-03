@@ -9,26 +9,56 @@
     .wrap { max-width: 720px; margin: 12vh auto; background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:32px; }
     h1 { margin:0 0 8px 0; font-size: 28px; }
     p { color:#4b5563; }
-    .btns { display:flex; gap:12px; margin-top:20px; }
+    .btns { display:flex; gap:12px; margin-top:20px; flex-wrap:wrap; }
     button { padding:12px 16px; border-radius:10px; border:1px solid #e5e7eb; cursor:pointer; font-weight:600; }
     .primary { background:#7c3aed; color:white; border-color:#6d28d9; }
     .ghost { background:white; }
+    .code-box {
+      margin-top:24px;
+      padding:12px 16px;
+      border-radius:10px;
+      border:1px dashed #cbd5f5;
+      background:#eef2ff;
+    }
+    .code-label { font-weight:600; }
+    code { font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 15px; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Thanks! You completed this block.</h1>
-    <p>You can submit now, or do <strong>another {{ config['STUDY_TRIALS_PER_PARTICIPANT'] or 10 }}</strong> trials to help our study.</p>
+    <p>
+      You can submit now, or do <strong>another {{ config['STUDY_TRIALS_PER_PARTICIPANT'] or 10 }}</strong>
+      trials to help our study.
+    </p>
+
     <div class="btns">
       <button id="more" class="primary">Do another {{ config['STUDY_TRIALS_PER_PARTICIPANT'] or 10 }}</button>
-      <button id="exit" class="ghost">Finish &amp; Submit</button>
+      <button id="exit" class="ghost">Finish &amp; Submit on MTurk</button>
     </div>
+
+    <div class="code-box">
+      <div class="code-label">Your MTurk completion code:</div>
+      <div style="margin-top:6px;">
+        <code id="ccode">(loading…)</code>
+      </div>
+      <p style="margin-top:8px; margin-bottom:0;">
+        Copy this code and paste it into the <strong>"Completion Code"</strong> box in your MTurk HIT,
+        then submit the HIT.
+      </p>
+    </div>
+
     <p id="msg" style="margin-top:16px;"></p>
   </div>
   <script>
     const msg = document.getElementById('msg');
     const pid = sessionStorage.getItem('participant_id');
     if (!pid) { location.href = '/study'; }
+
+    // derive a deterministic completion code from participant + condition
+    const storedCond = (sessionStorage.getItem('condition') || 'control').toLowerCase();
+    const code = `A3-${storedCond.toUpperCase()}-P${pid}`;
+    document.getElementById('ccode').textContent = code;
 
     document.getElementById('more').onclick = async () => {
       msg.textContent = 'Assigning the next block…';
@@ -40,7 +70,9 @@
       if (res.ok) {
         const d = await res.json();
         if (d.added > 0) {
-          location.href = '/study/run';
+          // keep same condition in the query string if present
+          const condParam = storedCond ? ('?condition=' + encodeURIComponent(storedCond)) : '';
+          location.href = '/study/run' + condParam;
         } else {
           msg.textContent = 'No more trials available.';
         }
@@ -51,10 +83,8 @@
     };
 
     document.getElementById('exit').onclick = () => {
-      // You could show a completion code here instead.
-      alert('Copy your completion code from the instructions page, then return to MTurk.');
-      // Or redirect to a dedicated completion page if implemented:
-      // location.href = '/study/complete?code=...';
+      alert('Copy the completion code shown on this page, then return to your MTurk tab and paste it into the "Completion Code" box before submitting.');
+      // no redirect: MTurk is in the other tab
     };
   </script>
 </body>
