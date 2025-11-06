@@ -223,3 +223,17 @@ def study_extend():
     db.session.commit()
 
     return jsonify({'ok': True, 'added': len(chosen)})
+@app.route("/admin/reset-once")
+def admin_reset_once():
+    # simple safety: force a confirm flag in the URL
+    if request.args.get("confirm") != "yes":
+        return "Add ?confirm=yes to actually reset data.", 400
+
+    # Delete from child tables first, then participants
+    AIEvent.query.delete()
+    Response.query.delete()
+    Assignment.query.delete()
+    Participant.query.delete()
+    db.session.commit()
+
+    return "OK – all participant/response data cleared.", 200
