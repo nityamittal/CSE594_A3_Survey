@@ -223,6 +223,7 @@ def study_extend():
     db.session.commit()
 
     return jsonify({'ok': True, 'added': len(chosen)})
+    
 @app.route("/admin/reset-once")
 def admin_reset_once():
     # simple safety: force a confirm flag in the URL
