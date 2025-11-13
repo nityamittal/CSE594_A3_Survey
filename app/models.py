@@ -19,6 +19,8 @@ class Trial(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     payload = db.Column(JSONType, nullable=False)  # stores dilemma_text, gt, ai fields
     split = db.Column(db.String(32), default='all', index=True)
+    ai_confidence = db.Column(db.Float, nullable=True)   # 0..1
+
 
 class Assignment(db.Model):
     __tablename__ = 'assignment'
@@ -37,6 +39,8 @@ class Response(db.Model):
     rt_ms = db.Column(db.Integer)
     revealed_ai = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    ai_confidence = db.Column(db.Float, nullable=True)   # 0..1 actually shown on that trial
+
 
 class AIEvent(db.Model):
     __tablename__ = 'ai_event'
