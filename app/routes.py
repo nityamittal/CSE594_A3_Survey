@@ -3,10 +3,12 @@ from sqlalchemy import func, text
 from app import app, db
 from app.models import Participant, Trial, Assignment, Response, AIEvent
 
+# ---------- Study entry / instructions ----------
 @app.route('/study', methods=['GET'])
 def study_index():
     return render_template('study_instructions.html')
 
+# ---------- Start: create participant + initial block ----------
 @app.route('/study/start', methods=['POST'])
 def study_start():
     data = request.get_json(force=True)
@@ -54,6 +56,7 @@ def study_start():
     db.session.commit()
     return jsonify({'participant_id': p.id, 'condition': condition, 'n_trials': len(chosen)}), 200
 
+# ---------- Next trial ----------
 @app.route('/study/next', methods=['GET'])
 def study_next():
     pid = int(request.args['participant_id'])
@@ -72,21 +75,25 @@ def study_next():
     trial = Trial.query.get(row[0])
     return jsonify({'trial_id': trial.id, 'payload': trial.payload})
 
+# ---------- Submit response (LOG ai_confidence here) ----------
 @app.route('/study/submit', methods=['POST'])
 def study_submit():
     d = request.get_json(force=True)
+    # answer is stored as JSON in your model; keep that behavior
     r = Response(
         participant_id=int(d['participant_id']),
         trial_id=int(d['trial_id']),
         answer=d.get('answer'),
         correct=None,
         rt_ms=int(d.get('rt_ms') or 0),
-        revealed_ai=bool(d.get('revealed_ai', False))
+        revealed_ai=bool(d.get('revealed_ai', False)),
+        ai_confidence=(float(d.get('ai_confidence')) if d.get('ai_confidence') is not None else None)  # <-- fixed
     )
     db.session.add(r)
     db.session.commit()
     return jsonify({'ok': True})
 
+# ---------- Log AI UI events ----------
 @app.route('/study/event', methods=['POST'])
 def study_event():
     d = request.get_json(force=True)
@@ -100,6 +107,7 @@ def study_event():
     db.session.commit()
     return jsonify({'ok': True})
 
+# ---------- Run + Finish screens ----------
 @app.route('/study/run', methods=['GET'])
 def study_run():
     return render_template('study_run.html')
@@ -108,11 +116,11 @@ def study_run():
 def study_finish():
     return render_template('study_finish.html')
 
-
+# ---------- Export ----------
 from io import StringIO
 import csv
-from flask import Response as FlaskResponse, jsonify, request
-from app.models import Response as RespModel, Participant, Trial
+from flask import Response as FlaskResponse, jsonify
+from app.models import Response as RespModel, Participant as PartModel, Trial as TrialModel
 
 @app.route('/study/export', methods=['GET'])
 def study_export():
@@ -122,16 +130,22 @@ def study_export():
     """
     fmt = (request.args.get('format') or 'csv').lower()
 
-    q = (db.session.query(RespModel, Participant, Trial)
-         .join(Participant, Participant.id == RespModel.participant_id)
-         .join(Trial, Trial.id == RespModel.trial_id)
+    q = (db.session.query(RespModel, PartModel, TrialModel)
+         .join(PartModel, PartModel.id == RespModel.participant_id)
+         .join(TrialModel, TrialModel.id == RespModel.trial_id)
          .order_by(RespModel.id.asc()))
 
-    # Normalize rows to a dict so we can emit either CSV or JSON
     rows = []
     for r, p, t in q.all():
         payload = t.payload or {}
         ans_val = (r.answer or {}).get("value") if isinstance(r.answer, dict) else None
+        # pick the logged confidence when available; otherwise fall back to trial-level/payload
+        ai_conf = r.ai_confidence
+        if ai_conf is None:
+            ai_conf = payload.get("ai_confidence")
+        if ai_conf is None and hasattr(t, "ai_confidence"):
+            ai_conf = t.ai_confidence
+
         rows.append({
             "response_id": r.id,
             "participant_id": r.participant_id,
@@ -144,18 +158,19 @@ def study_export():
             "gt_justification": payload.get("gt_justification"),
             "ai_severity_score": payload.get("ai_severity_score"),
             "ai_justification": payload.get("ai_justification"),
+            "ai_confidence": ai_conf,  # <-- now exported
             "dilemma_text": (payload.get("dilemma_text") or "").replace("\n", " ").strip(),
         })
 
     if fmt == "json":
         return jsonify(rows)
 
-    # default CSV
+    # include ai_confidence in CSV headers
     headers = [
         "response_id","participant_id","condition","trial_id",
         "answer_value","rt_ms","revealed_ai",
         "gt_severity_score","gt_justification",
-        "ai_severity_score","ai_justification",
+        "ai_severity_score","ai_justification","ai_confidence",
         "dilemma_text"
     ]
     sio = StringIO()
@@ -168,18 +183,15 @@ def study_export():
         headers={"Content-Disposition": "attachment; filename=study_export.csv"}
     )
 
-
+# ---------- Extend block ----------
 @app.route('/study/extend', methods=['POST'])
 def study_extend():
     """Assign another block of N trials to an existing participant."""
     data = request.get_json(force=True)
     pid = int(data['participant_id'])
 
-    # how many more to assign in this block
     N = app.config.get('STUDY_TRIALS_PER_PARTICIPANT', 10)
 
-    # Build a pool of candidate trial ids with global assignment counts,
-    # excluding trials already assigned to this participant.
     rows = db.session.execute(text("""
         WITH assigned_to_participant AS (
             SELECT trial_id FROM assignment WHERE participant_id = :pid
@@ -194,7 +206,6 @@ def study_extend():
     if not rows:
         return jsonify({'ok': False, 'error': 'no-unassigned-trials'}), 400
 
-    # coverage-first heuristic like study_start: prefer lowest-count trials
     import random
     min_cnt = min(r.cnt for r in rows) if rows else 0
     candidates = [r.tid for r in rows if r.cnt == min_cnt]
@@ -202,7 +213,6 @@ def study_extend():
     chosen = candidates[:N] if len(candidates) >= N else list(candidates)
     if len(chosen) < N:
         remaining = N - len(chosen)
-        # progressively allow next higher-count buckets
         for c in sorted({r.cnt for r in rows if r.cnt > min_cnt}):
             pool = [r.tid for r in rows if r.cnt == c and r.tid not in chosen]
             random.shuffle(pool)
@@ -212,7 +222,6 @@ def study_extend():
             if remaining <= 0:
                 break
 
-    # Assign new trials with order index continuing after existing assignments
     max_ord = db.session.execute(text("""
         SELECT COALESCE(MAX(order_idx), -1) FROM assignment WHERE participant_id = :pid
     """), {'pid': pid}).scalar()
@@ -223,5 +232,14 @@ def study_extend():
     db.session.commit()
 
     return jsonify({'ok': True, 'added': len(chosen)})
-    
 
+# ---------- AI suggestion payload (includes confidence) ----------
+@app.get('/api/trials/<int:trial_id>/ai')
+def api_trial_ai(trial_id):
+    trial = Trial.query.get_or_404(trial_id)
+    payload = {
+        "ai_score": int(trial.ai_severity_score),
+        "ai_justification": trial.ai_justification or "",
+        "ai_confidence": (trial.ai_confidence if hasattr(trial, "ai_confidence") and trial.ai_confidence is not None else 0.75)
+    }
+    return jsonify(payload)
