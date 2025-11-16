@@ -79,6 +79,26 @@
       padding: 12px;
       margin: 12px 0;
     }
+    .show-ai-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .show-ai-btn:focus {
+      outline: 2px solid #111827;
+      outline-offset: 2px;
+    }
+
+    .hidden {
+      display: none;
+    }
 
     .likert { list-style: none; padding-left: 0; margin: 8px 0; }
     .likert li { margin: 8px 0; }
@@ -129,12 +149,15 @@
     }
 
 
-    let startTs = 0, current = null;
+    let startTs = 0, current = null, aiRevealed = false;
+
+    
 
     async function loadNext() {
       const res = await fetch('/study/next?participant_id='+encodeURIComponent(pid));
       if (res.status === 204) { location.href='/study/finish'; return; }
       const d = await res.json(); current = d;
+      aiRevealed = false;
 
       const box = document.getElementById('trialBox');
       box.innerHTML = '';
@@ -145,19 +168,43 @@
       if ((qs.get('condition')||'control') === 'ai') {
         const aiScore = d.payload.ai_severity_score;
         const aiJust  = d.payload.ai_justification || '';
-        box.insertAdjacentHTML('beforeend',
-          `<div class="ai"><em>AI predicted severity:</em> <strong>${aiScore ?? '(n/a)'}</strong><br>
-           <em>AI justification:</em> ${aiJust}</div>`);
-        fetch('/study/event',{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            participant_id:Number(pid),
-            trial_id:d.trial_id,
-            event_type:'ai_shown',
-            payload:{ ai_severity_score: aiScore, ai_justification: aiJust }
-          })
+
+        const aiHtml = `
+          <div class="ai">
+            <button type="button" id="showAiBtn" class="show-ai-btn">
+              Show AI suggestion
+            </button>
+            <div id="aiContent" class="ai-content hidden">
+              <em>AI predicted severity:</em> <strong>${aiScore ?? '(n/a)'}</strong><br>
+              <em>AI justification:</em> ${aiJust}
+            </div>
+          </div>
+        `;
+        box.insertAdjacentHTML('beforeend', aiHtml);
+
+        const btn = document.getElementById('showAiBtn');
+        const content = document.getElementById('aiContent');
+
+        btn.addEventListener('click', () => {
+          aiRevealed = true;
+          btn.classList.add('hidden');
+          content.classList.remove('hidden');
+
+          // Log that the AI was actually shown
+          fetch('/study/event', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify({
+              participant_id: Number(pid),
+              trial_id: d.trial_id,
+              event_type: 'ai_shown',
+              payload: { ai_severity_score: aiScore, ai_justification: aiJust }
+            })
+          });
         });
       }
+
+
 
       const labels={1:'Minor issue',2:'Low-level tension',3:'Moderate dilemma',4:'Serious violation',5:'Severe crisis'};
       const ul = document.createElement('ul'); ul.className='likert';
@@ -182,7 +229,7 @@
         answer: { value: Number(sel.value) },
         correct: null,
         rt_ms: rt,
-        revealed_ai: (qs.get('condition')||'control')==='ai'
+        revealed_ai: aiRevealed
       };
       const res = await fetch('/study/submit', {
         method: 'POST',
