@@ -34,6 +34,12 @@ def seed_trials_csv(csv_path):
     """CSV columns: dilemma_text, gt_severity_score, gt_justification, ai_severity_score, ai_justification"""
     import pandas as _pd
     from app.models import Trial, db
+
+    
+    if Trial.query.first():
+        print("Trials already exist, skipping CSV seeding.")
+        return
+
     df = _pd.read_csv(csv_path)
     n = 0
     for _, row in df.iterrows():
